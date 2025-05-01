@@ -16,6 +16,16 @@ where
     }
 }
 
+impl<T> Vec2<T> {
+    pub fn x(&self) -> &T {
+        &self.u
+    }
+
+    pub fn y(&self) -> &T {
+        &self.v
+    }
+}
+
 impl<T> Add for Vec2<T>
 where
     T: Copy + Add<Output = T>,
@@ -33,16 +43,6 @@ where
     type Output = Self;
     fn sub(self, other: Self) -> Self {
         Vec2::new(self.u - other.u, self.v - other.v)
-    }
-}
-
-impl<T> Mul<f32> for Vec2<T>
-where
-    T: Copy + Mul<f32, Output = T>,
-{
-    type Output = Self;
-    fn mul(self, scalar: f32) -> Self {
-        Vec2::new(self.u * scalar, self.v * scalar)
     }
 }
 
@@ -91,13 +91,20 @@ where
     }
 }
 
-impl<T> Mul<f32> for Vec3<T>
-where
-    T: Copy + Mul<f32, Output = T>,
-{
-    type Output = Self;
-    fn mul(self, scalar: f32) -> Self {
-        Vec3::new(self.x * scalar, self.y * scalar, self.z * scalar)
+impl Mul<f32> for Vec2<f32> {
+    type Output = Vec2<f32>;
+    fn mul(self, scalar: f32) -> Self::Output {
+        Vec2::new(self.u * scalar, self.v * scalar)
+    }
+}
+
+impl Mul<f32> for Vec2<i32> {
+    type Output = Vec2<i32>;
+    fn mul(self, scalar: f32) -> Self::Output {
+        Vec2::new(
+            (self.u as f32 * scalar) as i32,
+            (self.v as f32 * scalar) as i32,
+        )
     }
 }
 
