@@ -2,13 +2,13 @@ use std::{env, mem::swap};
 
 use rand::Rng;
 use tinyrenderer_rust::{
-    geometry::{Vec2f, Vec2i},
+    geometry::{Vec2f, Vec2i, Vec3f},
     model::Model,
     tga::{Format, TGAColor, TGAImage},
 };
 
-const IMAGE_WIDTH: i32 = 2000;
-const IMAGE_HEIGHT: i32 = 2000;
+const IMAGE_WIDTH: i32 = 800;
+const IMAGE_HEIGHT: i32 = 800;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -23,40 +23,98 @@ fn main() {
     let red = TGAColor::from_rgba(255, 0, 0, 255);
     let green = TGAColor::from_rgba(0, 255, 0, 255);
     let magenta = TGAColor::from_rgba(255, 0, 255, 255);
+
     let mut image = TGAImage::new(IMAGE_WIDTH, IMAGE_HEIGHT, Format::RGB);
     let mut rng = rand::rng();
+
     let model = Model::new(model_path).expect("Failed to load model");
+    let light_dir = Vec3f::new(0.0, 0.0, -1.0);
+    let color_theme = vec![
+        TGAColor::from_hex(0xE0BBE4),
+        TGAColor::from_hex(0x957DAD),
+        TGAColor::from_hex(0xD291BC),
+        TGAColor::from_hex(0x8B008B),
+        TGAColor::from_hex(0xAA00BA),
+    ];
     for i in 0..model.nfaces() {
         let face = model.face(i);
-        let screen_coords: Vec<Vec2i> = face
-            .iter()
-            .map(|&idx| {
-                let v = model.vert(idx as usize);
-                Vec2i::new(
-                    ((v.x + 1.0) * IMAGE_WIDTH as f32 / 2.0) as i32,
-                    ((v.y + 1.0) * IMAGE_HEIGHT as f32 / 2.0) as i32,
-                )
-            })
-            .collect();
+        let mut screen_coords = Vec::with_capacity(3);
+        let mut world_coords = Vec::with_capacity(3);
 
-        triangle(
-            screen_coords[0],
-            screen_coords[1],
-            screen_coords[2],
-            &mut image,
-            TGAColor::from_rgba(
-                rng.random_range(0..255),
-                rng.random_range(0..255),
-                rng.random_range(0..255),
-                255,
-            ),
-        );
+        for &idx in face.iter() {
+            let v = model.vert(idx as usize);
+            screen_coords.push(Vec2i::new(
+                ((v.x + 1.0) * IMAGE_WIDTH as f32 / 2.0) as i32,
+                ((v.y + 1.0) * IMAGE_HEIGHT as f32 / 2.0) as i32,
+            ));
+            world_coords.push(v);
+        }
+        let mut n: Vec3f =
+            (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);
+        n.normalize();
+        let intensity = (n * light_dir).clamp(0.0, 1.0);
+
+        if intensity > 0.0 {
+            let color = get_shading_color(intensity, &color_theme);
+            triangle(
+                screen_coords[0],
+                screen_coords[1],
+                screen_coords[2],
+                &mut image,
+                color,
+            );
+        }
     }
 
     image.write_tga_file("output.tga", true, true).unwrap();
 }
 
+fn get_shading_color(intensity: f32, colors: &[TGAColor]) -> TGAColor {
+    let clamped = intensity.clamp(0.0, 1.0);
+
+    match colors.len() {
+        0 => TGAColor::from_rgba(0, 0, 0, 255),
+        1 => {
+            let scale = (clamped * 255.0).floor() as u8;
+            let base = colors[0];
+            TGAColor::from_rgba(
+                ((base[0] as u16 * scale as u16) / 255) as u8,
+                ((base[1] as u16 * scale as u16) / 255) as u8,
+                ((base[2] as u16 * scale as u16) / 255) as u8,
+                255,
+            )
+        }
+        _ => {
+            let max_index = colors.len() - 1;
+            let pos = clamped * max_index as f32;
+            let idx = pos.floor() as usize;
+            let t = pos - idx as f32;
+
+            let a = colors[idx];
+            let b = if idx + 1 < colors.len() {
+                colors[idx + 1]
+            } else {
+                colors[idx]
+            };
+
+            fn lerp(c1: u8, c2: u8, t: f32) -> u8 {
+                ((c1 as f32 * (1.0 - t)) + (c2 as f32 * t)).floor() as u8
+            }
+
+            TGAColor::from_rgba(
+                lerp(a[0], b[0], t),
+                lerp(a[1], b[1], t),
+                lerp(a[2], b[2], t),
+                255,
+            )
+        }
+    }
+}
+
 fn triangle(t0: Vec2i, t1: Vec2i, t2: Vec2i, image: &mut TGAImage, color: TGAColor) {
+    if t0.v == t1.v && t0.v == t2.v {
+        return;
+    };
     let mut t0 = t0;
     let mut t1 = t1;
     let mut t2 = t2;
@@ -93,7 +151,9 @@ fn triangle(t0: Vec2i, t1: Vec2i, t2: Vec2i, image: &mut TGAImage, color: TGACol
             std::mem::swap(&mut a, &mut b);
         }
         for j in a.u..=b.u {
-            let _ = image.set(j as usize, t0.v as usize + i, color);
+            if let Some(y) = (t0.v as usize).checked_add(i) {
+                let _ = image.set(j as usize, y, color);
+            }
         }
     }
 }

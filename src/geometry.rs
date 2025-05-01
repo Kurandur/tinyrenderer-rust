@@ -1,5 +1,5 @@
 use std::fmt;
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, BitXor, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec2<T> {
@@ -118,6 +118,21 @@ where
     }
 }
 
+impl<T> BitXor for Vec3<T>
+where
+    T: Copy + Sub<Output = T> + Mul<Output = T>,
+{
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Self::new(
+            self.y * rhs.z - self.z * rhs.y,
+            self.z * rhs.x - self.x * rhs.z,
+            self.x * rhs.y - self.y * rhs.x,
+        )
+    }
+}
+
 impl<T> Vec3<T>
 where
     T: Copy + Add<Output = T> + Sub<Output = T> + Mul<Output = T>,
@@ -130,17 +145,17 @@ where
         .sqrt()
     }
 
-    pub fn normalize(&self) -> Self
+    pub fn normalize(&mut self)
     where
         T: From<f32>,
     {
         let n = self.norm();
         let inv = 1.0 / n;
-        Self::new(
+        *self = Self::new(
             T::from(f32::from(self.x) * inv),
             T::from(f32::from(self.y) * inv),
             T::from(f32::from(self.z) * inv),
-        )
+        );
     }
 
     pub fn cross(self, other: Self) -> Self {

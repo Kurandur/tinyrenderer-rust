@@ -67,6 +67,14 @@ impl TGAColor {
             bytespp: 4,
         }
     }
+    pub fn from_hex(hex: u32) -> Self {
+        TGAColor::from_rgba(
+            ((hex >> 16) & 0xFF) as u8,
+            ((hex >> 8) & 0xFF) as u8,
+            (hex & 0xFF) as u8,
+            255,
+        )
+    }
 }
 
 impl Index<usize> for TGAColor {
