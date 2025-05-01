@@ -96,34 +96,6 @@ fn triangle(t0: Vec2i, t1: Vec2i, t2: Vec2i, image: &mut TGAImage, color: TGACol
             let _ = image.set(j as usize, t0.v as usize + i, color);
         }
     }
-    for y in t0.v..=t1.v {
-        let segment_height = t1.v - t0.v;
-        let alpha: f32 = (y - t0.v) as f32 / total_height as f32;
-        let beta: f32 = (y - t0.v) as f32 / segment_height as f32;
-
-        let mut a = t0 + (t2 - t0) * alpha;
-        let mut b = t0 + (t1 - t0) * beta;
-        if a.u > b.u {
-            std::mem::swap(&mut a, &mut b);
-        }
-        for j in a.u..=b.u {
-            let _ = image.set(j as usize, y as usize, color);
-        }
-    }
-    for y in t1.v..=t2.v {
-        let segment_height = t2.v - t1.v;
-        let alpha: f32 = (y - t0.v) as f32 / total_height as f32;
-        let beta: f32 = (y - t1.v) as f32 / segment_height as f32;
-
-        let mut a = t0 + (t2 - t0) * alpha;
-        let mut b = t1 + (t2 - t1) * beta;
-        if a.u > b.u {
-            std::mem::swap(&mut a, &mut b);
-        }
-        for j in a.u..=b.u {
-            let _ = image.set(j as usize, y as usize, color);
-        }
-    }
 }
 
 fn line(p0: Vec2i, p1: Vec2i, image: &mut TGAImage, color: TGAColor) {
