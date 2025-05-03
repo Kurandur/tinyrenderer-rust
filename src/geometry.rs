@@ -167,6 +167,17 @@ where
     }
 }
 
+impl Mul<f32> for Vec3i {
+    type Output = Vec3i;
+    fn mul(self, scalar: f32) -> Self::Output {
+        Vec3::new(
+            (self.x as f32 * scalar) as i32,
+            (self.y as f32 * scalar) as i32,
+            (self.z as f32 * scalar) as i32,
+        )
+    }
+}
+
 impl<T> fmt::Display for Vec3<T>
 where
     T: fmt::Display,
