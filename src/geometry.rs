@@ -14,6 +14,20 @@ where
     pub fn new(u: T, v: T) -> Self {
         Vec2 { u, v }
     }
+    pub fn get(&self, idx: usize) -> T {
+        match idx {
+            0 => self.u,
+            1 => self.v,
+            _ => panic!("Vec2 index out of bounds"),
+        }
+    }
+    pub fn set(&mut self, idx: usize, value: T) {
+        match idx {
+            0 => self.u = value,
+            1 => self.v = value,
+            _ => panic!("Vec2f index out of bounds"),
+        }
+    }
 }
 
 impl<T> Vec2<T> {
@@ -68,6 +82,14 @@ where
 {
     pub fn new(x: T, y: T, z: T) -> Self {
         Vec3 { x, y, z }
+    }
+    pub fn get(&self, index: usize) -> T {
+        match index {
+            0 => self.x,
+            1 => self.y,
+            2 => self.z,
+            _ => panic!("Index out of bounds for Vec3f"),
+        }
     }
 }
 

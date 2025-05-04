@@ -25,19 +25,21 @@ fn main() {
     let model = Model::new(model_path).expect("Failed to load model");
     let light_dir = Vec3f::new(0.0, 0.0, -1.0);
 
-    let mut zbuffer = vec![i32::MIN; IMAGE_WIDTH as usize * IMAGE_HEIGHT as usize];
+    let mut zbuffer = vec![f32::MIN; IMAGE_WIDTH as usize * IMAGE_HEIGHT as usize];
 
     for i in 0..model.nfaces() {
         let face = model.face(i);
-        let mut screen_coords: Vec<Vec3i> = Vec::with_capacity(3);
+
         let mut world_coords = Vec::with_capacity(3);
+        let mut pts: Vec<Vec3f> = Vec::with_capacity(3);
 
         for &idx in face.iter() {
             let v = model.vert(idx as usize);
-            screen_coords.push(Vec3i::new(
-                ((v.x + 1.0) * IMAGE_WIDTH as f32 / 2.0) as i32,
-                ((v.y + 1.0) * IMAGE_HEIGHT as f32 / 2.0) as i32,
-                ((v.z + 1.) * DEPTH as f32 / 2.) as i32,
+
+            pts.push(world_to_screen(
+                v,
+                IMAGE_WIDTH as usize,
+                IMAGE_HEIGHT as usize,
             ));
 
             world_coords.push(v);
@@ -49,9 +51,7 @@ fn main() {
 
         if intensity > 0.0 {
             triangle(
-                screen_coords[0],
-                screen_coords[1],
-                screen_coords[2],
+                pts,
                 &mut zbuffer,
                 &mut image,
                 TGAColor::from_rgb(
@@ -83,68 +83,81 @@ fn main() {
         .unwrap();
 }
 
-fn triangle(
-    mut t0: Vec3i,
-    mut t1: Vec3i,
-    mut t2: Vec3i,
-    zbuffer: &mut [i32],
-    image: &mut TGAImage,
-    color: TGAColor,
-) {
-    if t0.y == t1.y && t0.y == t2.y {
-        return;
+fn world_to_screen(v: Vec3f, width: usize, height: usize) -> Vec3f {
+    let x = ((v.x + 1.0) * (width as f32) / 2.0 + 0.5).floor() as f32;
+    let y = ((v.y + 1.0) * (height as f32) / 2.0 + 0.5).floor() as f32;
+    Vec3f::new(x, y, v.z)
+}
+
+fn barycentric(a: Vec3f, b: Vec3f, c: Vec3f, p: Vec3f) -> Vec3f {
+    let mut s = [Vec3f::new(0.0, 0.0, 0.0); 2];
+    for i in (0..2).rev() {
+        s[i] = Vec3f::new(
+            c.get(i) - a.get(i),
+            b.get(i) - a.get(i),
+            a.get(i) - p.get(i),
+        );
     }
 
-    if t0.y > t1.y {
-        std::mem::swap(&mut t0, &mut t1);
-    }
-    if t0.y > t2.y {
-        std::mem::swap(&mut t0, &mut t2);
-    }
-    if t1.y > t2.y {
-        std::mem::swap(&mut t1, &mut t2);
+    let u = Vec3f::cross(s[0], s[1]);
+    if u.z.abs() > 1e-2 {
+        return Vec3f::new(1.0 - (u.x + u.y) / u.z, u.y / u.z, u.x / u.z);
     }
 
-    let total_height = t2.y - t0.y;
-    for i in 0..total_height {
-        let second_half = i > (t1.y - t0.y) || t1.y == t0.y;
-        let segment_height = if second_half {
-            t2.y - t1.y
-        } else {
-            t1.y - t0.y
-        };
-        let alpha = i as f32 / total_height as f32;
-        let beta = if second_half {
-            (i - (t1.y - t0.y)) as f32 / segment_height as f32
-        } else {
-            i as f32 / segment_height as f32
-        };
+    Vec3f::new(-1.0, 1.0, 1.0)
+}
 
-        let mut a = t0 + (t2 - t0) * alpha;
-        let mut b = if second_half {
-            t1 + (t2 - t1) * beta
-        } else {
-            t0 + (t1 - t0) * beta
-        };
+fn triangle(pts: Vec<Vec3f>, zbuffer: &mut [f32], image: &mut TGAImage, color: TGAColor) {
+    let mut bbox_min = Vec2f::new(f32::MAX, f32::MAX);
+    let mut bbox_max = Vec2f::new(f32::MIN, f32::MIN);
 
-        if a.x > b.x {
-            std::mem::swap(&mut a, &mut b);
-        }
+    let clamp = Vec2f::new((IMAGE_WIDTH - 1) as f32, (IMAGE_HEIGHT - 1) as f32);
 
-        for j in a.x..=b.x {
-            let phi = if b.x == a.x {
-                1.0
-            } else {
-                (j - a.x) as f32 / (b.x - a.x) as f32
+    for i in 0..3 {
+        for j in 0..2 {
+            let val = match j {
+                0 => pts[i].x,
+                1 => pts[i].y,
+                _ => unreachable!(),
             };
-            let mut p = a + (b - a) * phi;
-            p.x = j;
-            p.y = t0.y + i;
+            let min_val = bbox_min.get(j).min(val).max(0.0);
+            let max_val = bbox_max.get(j).max(val).min(clamp.get(j));
+            bbox_min.set(j, min_val);
+            bbox_max.set(j, max_val);
+        }
+    }
+    let mut p = Vec3f::new(0.0, 0.0, 0.0);
 
-            let idx = (p.x + p.y * IMAGE_WIDTH) as usize;
-            if idx < zbuffer.len() && zbuffer[idx] < p.z {
+    let min_x = bbox_min.u.floor() as i32;
+    let max_x = bbox_max.u.ceil() as i32;
+    let min_y = bbox_min.v.floor() as i32;
+    let max_y = bbox_max.v.ceil() as i32;
+
+    for x in min_x..=max_x {
+        for y in min_y..=max_y {
+            p.x = x as f32;
+            p.y = y as f32;
+
+            let bc_screen = barycentric(pts[0], pts[1], pts[2], p);
+            if bc_screen.x < 0.0 || bc_screen.y < 0.0 || bc_screen.z < 0.0 {
+                continue;
+            }
+
+            p.z = 0.0;
+            for i in 0..3 {
+                let weight = match i {
+                    0 => bc_screen.x,
+                    1 => bc_screen.y,
+                    2 => bc_screen.z,
+                    _ => unreachable!(),
+                };
+                p.z += pts[i].z * weight;
+            }
+
+            let idx = (x + y * IMAGE_WIDTH as i32) as usize;
+            if idx < zbuffer.len() && p.z > zbuffer[idx] {
                 zbuffer[idx] = p.z;
-                let _ = image.set(p.x as usize, p.y as usize, color);
+                let _ = image.set(x as usize, y as usize, color);
             }
         }
     }
