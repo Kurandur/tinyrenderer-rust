@@ -91,6 +91,7 @@ pub enum Format {
     RGBA = 4,
 }
 
+#[derive(Debug)]
 pub struct TGAImage {
     w: i32,
     h: i32,

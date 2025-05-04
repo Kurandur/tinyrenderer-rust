@@ -50,7 +50,7 @@ fn main() {
         let intensity = n * light_dir;
 
         if intensity > 0.0 {
-            triangle(
+            triangle_raster(
                 pts,
                 &mut zbuffer,
                 &mut image,
@@ -107,7 +107,7 @@ fn barycentric(a: Vec3f, b: Vec3f, c: Vec3f, p: Vec3f) -> Vec3f {
     Vec3f::new(-1.0, 1.0, 1.0)
 }
 
-fn triangle(pts: Vec<Vec3f>, zbuffer: &mut [f32], image: &mut TGAImage, color: TGAColor) {
+fn triangle_raster(pts: Vec<Vec3f>, zbuffer: &mut [f32], image: &mut TGAImage, color: TGAColor) {
     let mut bbox_min = Vec2f::new(f32::MAX, f32::MAX);
     let mut bbox_max = Vec2f::new(f32::MIN, f32::MIN);
 
@@ -128,10 +128,10 @@ fn triangle(pts: Vec<Vec3f>, zbuffer: &mut [f32], image: &mut TGAImage, color: T
     }
     let mut p = Vec3f::new(0.0, 0.0, 0.0);
 
-    let min_x = bbox_min.u.floor() as i32;
-    let max_x = bbox_max.u.ceil() as i32;
-    let min_y = bbox_min.v.floor() as i32;
-    let max_y = bbox_max.v.ceil() as i32;
+    let min_x = bbox_min.x.floor() as i32;
+    let max_x = bbox_max.x.ceil() as i32;
+    let min_y = bbox_min.y.floor() as i32;
+    let max_y = bbox_max.y.ceil() as i32;
 
     for x in min_x..=max_x {
         for y in min_y..=max_y {
@@ -163,11 +163,68 @@ fn triangle(pts: Vec<Vec3f>, zbuffer: &mut [f32], image: &mut TGAImage, color: T
     }
 }
 
+fn triangle_scanline(
+    pts: &mut [Vec3f; 3],
+    zbuffer: &mut [i32],
+    image: &mut TGAImage,
+    color: TGAColor,
+) {
+    if pts[0].y == pts[1].y && pts[0].y == pts[2].y {
+        return;
+    }
+
+    pts.sort_by(|a, b| a.y.partial_cmp(&b.y).unwrap());
+
+    let total_height = (pts[2].y - pts[0].y) as i32;
+    for i in 0..total_height {
+        let second_half = i as f32 > (pts[1].y - pts[0].y) || pts[1].y == pts[0].y;
+        let segment_height = if second_half {
+            pts[2].y - pts[1].y
+        } else {
+            pts[1].y - pts[0].y
+        };
+        let alpha = i as f32 / total_height as f32;
+        let beta = if second_half {
+            (i as f32 - (pts[1].y - pts[0].y)) as f32 / segment_height as f32
+        } else {
+            i as f32 / segment_height as f32
+        };
+
+        let mut a = pts[0] + (pts[2] - pts[0]) * alpha;
+        let mut b = if second_half {
+            pts[1] + (pts[2] - pts[1]) * beta
+        } else {
+            pts[0] + (pts[1] - pts[0]) * beta
+        };
+
+        if a.x > b.x {
+            std::mem::swap(&mut a, &mut b);
+        }
+
+        for j in (a.x as usize)..=(b.x as usize) {
+            let phi = if b.x == a.x {
+                1.0
+            } else {
+                (j as f32 - a.x) as f32 / (b.x - a.x) as f32
+            };
+            let mut p = a + (b - a) * phi;
+            p.x = j as f32;
+            p.y = pts[0].y + i as f32;
+
+            let idx = (p.x + p.y * IMAGE_WIDTH as f32) as usize;
+            if idx < zbuffer.len() && zbuffer[idx] < p.z as i32 {
+                zbuffer[idx] = p.z as i32;
+                let _ = image.set(p.x as usize, p.y as usize, color);
+            }
+        }
+    }
+}
+
 fn line(p0: Vec2i, p1: Vec2i, image: &mut TGAImage, color: TGAColor) {
-    let mut x0 = p0.u;
-    let mut y0 = p0.v;
-    let mut x1 = p1.u;
-    let mut y1 = p1.v;
+    let mut x0 = p0.x;
+    let mut y0 = p0.y;
+    let mut x1 = p1.x;
+    let mut y1 = p1.y;
     let mut steep = false;
 
     if (x0 - x1).abs() < (y0 - y1).abs() {

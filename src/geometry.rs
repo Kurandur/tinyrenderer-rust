@@ -3,8 +3,8 @@ use std::ops::{Add, BitXor, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec2<T> {
-    pub u: T,
-    pub v: T,
+    pub x: T,
+    pub y: T,
 }
 
 impl<T> Vec2<T>
@@ -12,19 +12,19 @@ where
     T: Copy,
 {
     pub fn new(u: T, v: T) -> Self {
-        Vec2 { u, v }
+        Vec2 { x: u, y: v }
     }
     pub fn get(&self, idx: usize) -> T {
         match idx {
-            0 => self.u,
-            1 => self.v,
+            0 => self.x,
+            1 => self.y,
             _ => panic!("Vec2 index out of bounds"),
         }
     }
     pub fn set(&mut self, idx: usize, value: T) {
         match idx {
-            0 => self.u = value,
-            1 => self.v = value,
+            0 => self.x = value,
+            1 => self.y = value,
             _ => panic!("Vec2f index out of bounds"),
         }
     }
@@ -32,11 +32,11 @@ where
 
 impl<T> Vec2<T> {
     pub fn x(&self) -> &T {
-        &self.u
+        &self.x
     }
 
     pub fn y(&self) -> &T {
-        &self.v
+        &self.y
     }
 }
 
@@ -46,7 +46,7 @@ where
 {
     type Output = Self;
     fn add(self, other: Self) -> Self {
-        Vec2::new(self.u + other.u, self.v + other.v)
+        Vec2::new(self.x + other.x, self.y + other.y)
     }
 }
 
@@ -56,7 +56,7 @@ where
 {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
-        Vec2::new(self.u - other.u, self.v - other.v)
+        Vec2::new(self.x - other.x, self.y - other.y)
     }
 }
 
@@ -65,7 +65,7 @@ where
     T: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "({}, {})", self.u, self.v)
+        write!(f, "({}, {})", self.x, self.y)
     }
 }
 
@@ -116,7 +116,7 @@ where
 impl Mul<f32> for Vec2<f32> {
     type Output = Vec2<f32>;
     fn mul(self, scalar: f32) -> Self::Output {
-        Vec2::new(self.u * scalar, self.v * scalar)
+        Vec2::new(self.x * scalar, self.y * scalar)
     }
 }
 
@@ -124,8 +124,8 @@ impl Mul<f32> for Vec2<i32> {
     type Output = Vec2<i32>;
     fn mul(self, scalar: f32) -> Self::Output {
         Vec2::new(
-            (self.u as f32 * scalar) as i32,
-            (self.v as f32 * scalar) as i32,
+            (self.x as f32 * scalar) as i32,
+            (self.y as f32 * scalar) as i32,
         )
     }
 }
@@ -137,6 +137,20 @@ where
     type Output = T;
     fn mul(self, other: Self) -> T {
         self.x * other.x + self.y * other.y + self.z * other.z
+    }
+}
+
+impl<T> Mul<T> for Vec3<T>
+where
+    T: Copy + Mul<Output = T>,
+{
+    type Output = Vec3<T>;
+    fn mul(self, s: T) -> Vec3<T> {
+        Vec3 {
+            x: self.x * s,
+            y: self.y * s,
+            z: self.z * s,
+        }
     }
 }
 

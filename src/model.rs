@@ -3,18 +3,24 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 
-use crate::geometry::Vec3f;
+use crate::geometry::{Vec2f, Vec3f};
+use crate::tga::TGAImage;
 
 #[derive(Debug)]
 pub struct Model {
     verts: Vec<Vec3f>,
     faces: Vec<Vec<i32>>,
+    norms: Vec<Vec3f>,
+    uv: Vec<Vec2f>,
+    diffusemap: Option<TGAImage>,
 }
 
 impl Model {
     pub fn new(filename: &str) -> io::Result<Self> {
         let mut verts = Vec::new();
         let mut faces = Vec::new();
+        let mut norms = Vec::new();
+        let mut uv = Vec::new();
 
         let file = File::open(filename)?;
         let reader = io::BufReader::new(file);
@@ -46,13 +52,42 @@ impl Model {
                         }
                         faces.push(face);
                     }
+                    "vn" => {
+                        let coords: Vec<f32> = parts
+                            .take(3)
+                            .filter_map(|x| x.parse::<f32>().ok())
+                            .collect();
+                        if coords.len() == 3 {
+                            norms.push(Vec3f::new(coords[0], coords[1], coords[2]));
+                        }
+                    }
+                    "vt" => {
+                        let coords: Vec<f32> = parts
+                            .take(2)
+                            .filter_map(|x| x.parse::<f32>().ok())
+                            .collect();
+                        if coords.len() == 2 {
+                            uv.push(Vec2f::new(coords[0], coords[1]));
+                        }
+                    }
                     _ => {}
                 }
             }
         }
-
-        eprintln!("# v# {} f# {}", verts.len(), faces.len());
-        Ok(Model { verts, faces })
+        eprintln!(
+            "# v# {} f# {} n# {} uv# {}",
+            verts.len(),
+            faces.len(),
+            norms.len(),
+            uv.len()
+        );
+        Ok(Model {
+            verts,
+            faces,
+            norms,
+            uv,
+            diffusemap: None,
+        })
     }
 
     pub fn nverts(&self) -> usize {
