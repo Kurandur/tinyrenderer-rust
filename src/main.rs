@@ -22,26 +22,33 @@ fn main() {
 
     let mut image = TGAImage::new(IMAGE_WIDTH, IMAGE_HEIGHT, Format::RGB);
 
-    let model = Model::new(model_path).expect("Failed to load model");
+    let mut model = Model::new(model_path).expect("Failed to load model");
+    model.load_texture("dude_diffuse.tga");
     let light_dir = Vec3f::new(0.0, 0.0, -1.0);
 
-    let mut zbuffer = vec![f32::MIN; IMAGE_WIDTH as usize * IMAGE_HEIGHT as usize];
+    let mut zbuffer = vec![i32::MIN; IMAGE_WIDTH as usize * IMAGE_HEIGHT as usize];
 
     for i in 0..model.nfaces() {
         let face = model.face(i);
 
+        let mut screen_coords: Vec<Vec3i> = Vec::with_capacity(3);
         let mut world_coords = Vec::with_capacity(3);
         let mut pts: Vec<Vec3f> = Vec::with_capacity(3);
 
-        for &idx in face.iter() {
-            let v = model.vert(idx as usize);
+        for j in 0..3 {
+            let idx = face[j].x as usize;
+            let v = model.vert(idx);
 
+            screen_coords.push(Vec3i::new(
+                ((v.x + 1.0) * IMAGE_WIDTH as f32 / 2.0) as i32,
+                ((v.y + 1.0) * IMAGE_HEIGHT as f32 / 2.0) as i32,
+                ((v.z + 1.0) * DEPTH as f32 / 2.0) as i32,
+            ));
             pts.push(world_to_screen(
                 v,
                 IMAGE_WIDTH as usize,
                 IMAGE_HEIGHT as usize,
             ));
-
             world_coords.push(v);
         }
         let mut n: Vec3f =
@@ -50,21 +57,30 @@ fn main() {
         let intensity = n * light_dir;
 
         if intensity > 0.0 {
-            triangle_raster(
-                pts,
+            let mut uv: Vec<Vec2i> = Vec::with_capacity(3);
+            for k in 0..3 {
+                uv.push(model.uv(i, k));
+            }
+            triangle_scanline(
+                screen_coords[0],
+                screen_coords[1],
+                screen_coords[2],
+                uv[0],
+                uv[1],
+                uv[2],
                 &mut zbuffer,
                 &mut image,
-                TGAColor::from_rgb(
-                    (intensity * 255.0).floor() as u8,
-                    (intensity * 255.0).floor() as u8,
-                    (intensity * 255.0).floor() as u8,
-                ),
+                &model,
+                intensity,
             );
         }
     }
 
     image.write_tga_file("output.tga", true, true).unwrap();
-
+    &model
+        .diffusemap
+        .unwrap()
+        .write_tga_file("texture-check.tga", true, true);
     let mut zbuffer_image = TGAImage::new(IMAGE_WIDTH, IMAGE_HEIGHT, Format::RGB);
 
     for j in 0..IMAGE_HEIGHT {
@@ -212,8 +228,8 @@ fn triangle_scanline(
         } else {
             t0 + (t1 - t0) * beta
         };
-        let uv_a = uv0 + (uv2 - uv0) * alpha;
-        let uv_b = if second_half {
+        let mut uv_a = uv0 + (uv2 - uv0) * alpha;
+        let mut uv_b = if second_half {
             uv1 + (uv2 - uv1) * beta
         } else {
             uv0 + (uv1 - uv0) * beta
@@ -221,6 +237,7 @@ fn triangle_scanline(
 
         if a.x > b.x {
             std::mem::swap(&mut a, &mut b);
+            std::mem::swap(&mut uv_a, &mut uv_b);
         }
 
         for j in (a.x as usize)..=(b.x as usize) {
@@ -242,9 +259,9 @@ fn triangle_scanline(
                     p.x as usize,
                     p.y as usize,
                     TGAColor::from_rgb(
-                        (color[0] as f32 * intensity) as u8,
-                        (color[1] as f32 * intensity) as u8,
                         (color[2] as f32 * intensity) as u8,
+                        (color[1] as f32 * intensity) as u8,
+                        (color[0] as f32 * intensity) as u8,
                     ),
                 );
             }

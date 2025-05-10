@@ -3,8 +3,8 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 
-use crate::geometry::{Vec2f, Vec3f};
-use crate::tga::TGAImage;
+use crate::geometry::{Vec2f, Vec2i, Vec3f, Vec3i};
+use crate::tga::{TGAColor, TGAImage};
 
 #[derive(Debug)]
 pub struct Model {
@@ -12,7 +12,7 @@ pub struct Model {
     faces: Vec<Vec<Vec3i>>,
     norms: Vec<Vec3f>,
     uv: Vec<Vec2f>,
-    diffusemap: Option<TGAImage>,
+    pub diffusemap: Option<TGAImage>,
 }
 
 impl Model {
@@ -90,6 +90,42 @@ impl Model {
         })
     }
 
+    pub fn load_texture(&mut self, filename: &str) {
+        let texfile = Path::new(filename);
+
+        match TGAImage::from_tga_file(texfile.to_str().unwrap()) {
+            Some(img) => {
+                self.diffusemap = Some(img);
+                eprintln!("texture file {} loading ok", texfile.display());
+            }
+            None => {
+                eprintln!("texture file {} loading failed", texfile.display());
+            }
+        }
+    }
+
+    pub fn diffuse(&self, uv: Vec2i) -> TGAColor {
+        if let Some(ref map) = self.diffusemap {
+            map.get(uv.x, uv.y)
+                .unwrap_or_else(|| TGAColor::from_bpp(map.bpp))
+        } else {
+            TGAColor::from_bpp(3)
+        }
+    }
+
+    pub fn uv(&self, iface: usize, nthvert: usize) -> Vec2i {
+        let idx = (self.faces[iface][nthvert].y) as usize;
+        let uv_idx = self.uv[idx];
+        if let Some(diffusemap) = &self.diffusemap {
+            Vec2i {
+                x: (uv_idx.x * diffusemap.width() as f32) as i32,
+                y: (uv_idx.y * diffusemap.height() as f32) as i32,
+            }
+        } else {
+            return Vec2i { x: 0, y: 0 };
+        }
+    }
+
     pub fn nverts(&self) -> usize {
         self.verts.len()
     }
@@ -102,7 +138,7 @@ impl Model {
         self.verts[idx]
     }
 
-    pub fn face(&self, idx: usize) -> &Vec<i32> {
+    pub fn face(&self, idx: usize) -> &Vec<Vec3i> {
         &self.faces[idx]
     }
 }
