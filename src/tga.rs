@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{self, Write},
+    io::{self, Read, Seek, SeekFrom, Write},
     ops::Index,
 };
 
@@ -36,6 +36,59 @@ impl TGAHeader {
             height: 0,
             bits_per_pixel: 0,
             image_descriptor: 0,
+        }
+    }
+    pub fn from_file(mut file: &File) -> Self {
+        let mut id_length = [0u8; 1];
+        let mut color_map_type = [0u8; 1];
+        let mut data_type_code = [0u8; 1];
+        let mut color_map_origin = [0u8; 2];
+        let mut color_map_length = [0u8; 2];
+        let mut color_map_depth = [0u8; 1];
+        let mut x_origin = [0u8; 2];
+        let mut y_origin = [0u8; 2];
+        let mut width = [0u8; 2];
+        let mut height = [0u8; 2];
+        let mut bits_per_pixel = [0u8; 1];
+        let mut image_descriptor = [0u8; 1];
+
+        file.read_exact(&mut id_length)
+            .expect("Error while reading id_length");
+        file.read_exact(&mut color_map_type)
+            .expect("Error while reading color_map_type");
+        file.read_exact(&mut data_type_code)
+            .expect("Error while reading id_length");
+        file.read_exact(&mut color_map_origin)
+            .expect("Error while reading color_map_origin");
+        file.read_exact(&mut color_map_length)
+            .expect("Error while reading color_map_length");
+        file.read_exact(&mut color_map_depth)
+            .expect("Error while reading color_map_depth");
+        file.read_exact(&mut x_origin)
+            .expect("Error while reading x_origin");
+        file.read_exact(&mut y_origin)
+            .expect("Error while reading y_origin");
+        file.read_exact(&mut width)
+            .expect("Error while reading width");
+        file.read_exact(&mut height)
+            .expect("Error while reading height");
+        file.read_exact(&mut bits_per_pixel)
+            .expect("Error while reading bits_per_pixel");
+        file.read_exact(&mut image_descriptor)
+            .expect("Error while reading image_descriptor");
+        TGAHeader {
+            id_length: id_length[0],
+            color_map_type: color_map_type[0],
+            data_type_code: data_type_code[0],
+            color_map_origin: u16::from_le_bytes(color_map_origin),
+            color_map_length: u16::from_le_bytes(color_map_length),
+            color_map_depth: color_map_depth[0],
+            x_origin: u16::from_le_bytes(x_origin),
+            y_origin: u16::from_le_bytes(y_origin),
+            width: u16::from_le_bytes(width),
+            height: u16::from_le_bytes(height),
+            bits_per_pixel: bits_per_pixel[0],
+            image_descriptor: image_descriptor[0],
         }
     }
 }
@@ -75,6 +128,12 @@ impl TGAColor {
             255,
         )
     }
+    pub fn from_bpp(bpp: u8) -> Self {
+        TGAColor {
+            bgra: [0; 4],
+            bytespp: bpp,
+        }
+    }
 }
 
 impl Index<usize> for TGAColor {
@@ -91,11 +150,22 @@ pub enum Format {
     RGBA = 4,
 }
 
+impl Format {
+    pub fn from_bpp(bpp: u8) -> Option<Self> {
+        match bpp {
+            1 => Some(Format::Grayscale),
+            3 => Some(Format::RGB),
+            4 => Some(Format::RGBA),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct TGAImage {
     w: i32,
     h: i32,
-    bpp: u8,
+    pub bpp: u8,
     data: Vec<u8>,
 }
 
@@ -114,6 +184,82 @@ impl TGAImage {
             data: vec![0; data_len],
         }
     }
+
+    pub fn from_tga_file(filename: &str) -> Option<TGAImage> {
+        let mut file = match File::open(filename) {
+            Ok(f) => f,
+            Err(_) => {
+                eprintln!("can't open file {}", filename);
+                return None;
+            }
+        };
+
+        let header = TGAHeader::from_file(&file);
+        let width = header.width;
+        let height = header.height;
+        let bytespp = header.bits_per_pixel >> 3;
+        let nbytes = (width as usize) * (height as usize) * (bytespp as usize);
+
+        if header.id_length > 0 {
+            file.seek(SeekFrom::Current(header.id_length as i64)).ok()?;
+        }
+
+        let data = match header.data_type_code {
+            2 => {
+                let mut buf = vec![0u8; nbytes];
+                file.read_exact(&mut buf).ok()?;
+                buf
+            }
+            10 => TGAImage::load_rle_data(&mut file, width as usize, height as usize, bytespp)?,
+            other => {
+                eprintln!("unsupported data type code: {}", other);
+                return None;
+            }
+        };
+
+        Some(TGAImage {
+            h: height as i32,
+            w: width as i32,
+            bpp: bytespp,
+            data: data,
+        })
+    }
+
+    fn load_rle_data(file: &mut File, width: usize, height: usize, bpp: u8) -> Option<Vec<u8>> {
+        let pixel_size = bpp as usize;
+        let mut data = Vec::with_capacity(width * height * pixel_size);
+        let mut pixels_read = 0;
+        let total_pixels = width * height;
+
+        while pixels_read < total_pixels {
+            let mut header = [0u8; 1];
+            file.read_exact(&mut header).ok()?;
+            let chunk_header = header[0];
+
+            let count = (chunk_header & 0x7F) + 1;
+            if chunk_header & 0x80 != 0 {
+                let mut pixel = vec![0u8; pixel_size];
+                file.read_exact(&mut pixel).ok()?;
+                for _ in 0..count {
+                    data.extend(&pixel);
+                    pixels_read += 1;
+                }
+            } else {
+                for _ in 0..count {
+                    let mut pixel = vec![0u8; pixel_size];
+                    file.read_exact(&mut pixel).ok()?;
+                    data.extend(&pixel);
+                    pixels_read += 1;
+                }
+            }
+        }
+
+        Some(data)
+    }
+
+    fn flip_vertically(&mut self) {}
+
+    fn flip_horizontally(&mut self) {}
 
     pub fn width(&self) -> i32 {
         self.w
@@ -137,6 +283,29 @@ impl TGAImage {
 
         self.data[index..index + bpp].copy_from_slice(&color.bgra[..bpp]);
         Ok(())
+    }
+
+    pub fn get(&self, x: i32, y: i32) -> Option<TGAColor> {
+        if x < 0 || y < 0 || x >= self.w || y >= self.h || self.data.is_empty() {
+            return None;
+        }
+
+        let bytespp = self.bpp as usize;
+        let idx = (x + y * self.w) as usize * bytespp;
+
+        if idx + bytespp > self.data.len() {
+            return None;
+        }
+
+        let mut color = TGAColor {
+            bgra: [0, 0, 0, 0],
+            bytespp: self.bpp,
+        };
+        for i in 0..bytespp {
+            color.bgra[i] = self.data[idx + i];
+        }
+
+        Some(color)
     }
 
     pub fn unload_rle_data(&self, out: &mut dyn Write) -> io::Result<()> {
@@ -225,7 +394,6 @@ impl TGAImage {
             self.unload_rle_data(&mut out)?;
         }
 
-        // Footer
         out.write_all(&developer_area_ref)?;
         out.write_all(&extension_area_ref)?;
         out.write_all(footer)?;
