@@ -164,37 +164,59 @@ fn triangle_raster(pts: Vec<Vec3f>, zbuffer: &mut [f32], image: &mut TGAImage, c
 }
 
 fn triangle_scanline(
-    pts: &mut [Vec3f; 3],
+    mut t0: Vec3i,
+    mut t1: Vec3i,
+    mut t2: Vec3i,
+    mut uv0: Vec2i,
+    mut uv1: Vec2i,
+    mut uv2: Vec2i,
     zbuffer: &mut [i32],
     image: &mut TGAImage,
-    color: TGAColor,
+    model: &Model,
+    intensity: f32,
 ) {
-    if pts[0].y == pts[1].y && pts[0].y == pts[2].y {
+    if t0.y == t1.y && t0.y == t2.y {
         return;
     }
 
-    pts.sort_by(|a, b| a.y.partial_cmp(&b.y).unwrap());
-
-    let total_height = (pts[2].y - pts[0].y) as i32;
+    if t0.y > t1.y {
+        std::mem::swap(&mut t0, &mut t1);
+        std::mem::swap(&mut uv0, &mut uv1);
+    }
+    if t0.y > t2.y {
+        std::mem::swap(&mut t0, &mut t2);
+        std::mem::swap(&mut uv0, &mut uv2);
+    }
+    if t1.y > t2.y {
+        std::mem::swap(&mut t1, &mut t2);
+        std::mem::swap(&mut uv1, &mut uv2);
+    }
+    let total_height = (t2.y - t0.y) as i32;
     for i in 0..total_height {
-        let second_half = i as f32 > (pts[1].y - pts[0].y) || pts[1].y == pts[0].y;
+        let second_half = i > (t1.y - t0.y) || t1.y == t0.y;
         let segment_height = if second_half {
-            pts[2].y - pts[1].y
+            t2.y - t1.y
         } else {
-            pts[1].y - pts[0].y
+            t1.y - t0.y
         };
         let alpha = i as f32 / total_height as f32;
         let beta = if second_half {
-            (i as f32 - (pts[1].y - pts[0].y)) as f32 / segment_height as f32
+            (i - (t1.y - t0.y)) as f32 / segment_height as f32
         } else {
             i as f32 / segment_height as f32
         };
 
-        let mut a = pts[0] + (pts[2] - pts[0]) * alpha;
+        let mut a = t0 + (t2 - t0) * alpha;
         let mut b = if second_half {
-            pts[1] + (pts[2] - pts[1]) * beta
+            t1 + (t2 - t1) * beta
         } else {
-            pts[0] + (pts[1] - pts[0]) * beta
+            t0 + (t1 - t0) * beta
+        };
+        let uv_a = uv0 + (uv2 - uv0) * alpha;
+        let uv_b = if second_half {
+            uv1 + (uv2 - uv1) * beta
+        } else {
+            uv0 + (uv1 - uv0) * beta
         };
 
         if a.x > b.x {
@@ -205,16 +227,26 @@ fn triangle_scanline(
             let phi = if b.x == a.x {
                 1.0
             } else {
-                (j as f32 - a.x) as f32 / (b.x - a.x) as f32
+                ((j as i32 - a.x) as f32 / (b.x - a.x) as f32) as f32
             };
             let mut p = a + (b - a) * phi;
-            p.x = j as f32;
-            p.y = pts[0].y + i as f32;
+            let uv_p = uv_a + (uv_b - uv_a) * phi;
+            p.x = j as i32;
+            p.y = t0.y + i;
 
-            let idx = (p.x + p.y * IMAGE_WIDTH as f32) as usize;
+            let idx = (p.x + p.y * IMAGE_WIDTH) as usize;
             if idx < zbuffer.len() && zbuffer[idx] < p.z as i32 {
                 zbuffer[idx] = p.z as i32;
-                let _ = image.set(p.x as usize, p.y as usize, color);
+                let color = model.diffuse(uv_p);
+                let _ = image.set(
+                    p.x as usize,
+                    p.y as usize,
+                    TGAColor::from_rgb(
+                        (color[0] as f32 * intensity) as u8,
+                        (color[1] as f32 * intensity) as u8,
+                        (color[2] as f32 * intensity) as u8,
+                    ),
+                );
             }
         }
     }

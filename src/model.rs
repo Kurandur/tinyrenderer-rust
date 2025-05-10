@@ -9,7 +9,7 @@ use crate::tga::TGAImage;
 #[derive(Debug)]
 pub struct Model {
     verts: Vec<Vec3f>,
-    faces: Vec<Vec<i32>>,
+    faces: Vec<Vec<Vec3i>>,
     norms: Vec<Vec3f>,
     uv: Vec<Vec2f>,
     diffusemap: Option<TGAImage>,
@@ -42,12 +42,12 @@ impl Model {
                     "f" => {
                         let mut face = Vec::new();
                         for part in parts {
-                            let mut indices = part.split('/');
-                            if let Some(vertex_idx) = indices.next() {
-                                if let Ok(mut idx) = vertex_idx.parse::<i32>() {
-                                    idx -= 1;
-                                    face.push(idx);
-                                }
+                            let indices: Vec<_> = part.split('/').collect();
+                            if indices.len() >= 3 {
+                                let v_idx = indices[0].parse::<i32>().unwrap_or(0) - 1;
+                                let vt_idx = indices[1].parse::<i32>().unwrap_or(0) - 1;
+                                let vn_idx = indices[2].parse::<i32>().unwrap_or(0) - 1;
+                                face.push(Vec3i::new(v_idx, vt_idx, vn_idx));
                             }
                         }
                         faces.push(face);
