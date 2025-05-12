@@ -25,3 +25,11 @@ I added a function that allows shading by a range of colors
 #### Z Buffer integrated into the scanline method
 
 ![Z Buffer](assets/zbuffer.png)
+
+#### Texture mapping
+
+![Texture mapping](assets/texture-mapped-head.png)
+
+#### Perspective correction
+
+![Perspective correction](assets/perspective-correction.png)
