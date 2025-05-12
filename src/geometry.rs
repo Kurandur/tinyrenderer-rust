@@ -1,5 +1,5 @@
-use std::fmt;
-use std::ops::{Add, BitXor, Mul, Sub};
+use std::fmt::{self, Display};
+use std::ops::{Add, BitXor, Index, IndexMut, Mul, Sub};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Vec2<T> {
@@ -227,3 +227,171 @@ pub type Vec2f = Vec2<f32>;
 pub type Vec2i = Vec2<i32>;
 pub type Vec3f = Vec3<f32>;
 pub type Vec3i = Vec3<i32>;
+
+impl From<Vec3<f32>> for Vec3<i32> {
+    fn from(v: Vec3<f32>) -> Self {
+        Vec3 {
+            x: v.x as i32,
+            y: v.y as i32,
+            z: v.z as i32,
+        }
+    }
+}
+
+pub struct Matrix {
+    m: Vec<Vec<f32>>,
+    rows: usize,
+    cols: usize,
+}
+
+impl Matrix {
+    pub fn new(rows: usize, cols: usize) -> Self {
+        Matrix {
+            cols: cols,
+            rows: rows,
+            m: vec![vec![0.0; cols]; rows],
+        }
+    }
+
+    pub fn new_from_viewport(x: usize, y: usize, w: usize, h: usize) -> Self {
+        let mut m = Matrix::identity(4);
+
+        m[0][3] = x as f32 + w as f32 / 2.0;
+        m[1][3] = y as f32 + h as f32 / 2.0;
+        m[2][3] = 255.0 / 2.0;
+
+        m[0][0] = w as f32 / 2.0;
+        m[1][1] = h as f32 / 2.0;
+        m[2][2] = 255.0 / 2.0;
+
+        return m;
+    }
+
+    pub fn new_from_vector(v: Vec3f) -> Self {
+        let mut m = Matrix::new(4, 1);
+        m[0][0] = v.x;
+        m[1][0] = v.y;
+        m[2][0] = v.z;
+        m[3][0] = 1.0;
+        return m;
+    }
+
+    pub fn nrows(&self) -> usize {
+        self.rows
+    }
+
+    pub fn ncols(&self) -> usize {
+        self.cols
+    }
+
+    fn get(&self, index: usize) -> &Vec<f32> {
+        &self.m[index]
+    }
+
+    fn get_mut(&mut self, index: usize) -> &mut Vec<f32> {
+        &mut self.m[index]
+    }
+
+    pub fn identity(dimensions: usize) -> Matrix {
+        let mut result = Matrix::new(dimensions, dimensions);
+
+        for i in 0..dimensions {
+            for j in 0..dimensions {
+                result[i][j] = if i == j { 1.0 } else { 0.0 };
+            }
+        }
+
+        result
+    }
+
+    pub fn to_vector(&self) -> Vec3f {
+        return Vec3f {
+            x: self[0][0] / self[3][0],
+            y: self[1][0] / self[3][0],
+            z: self[2][0] / self[3][0],
+        };
+    }
+
+    pub fn zoom(factor: f32) -> Matrix {
+        let mut z = Matrix::identity(4);
+        z[0][0] = factor;
+        z[1][1] = factor;
+        z[2][2] = factor;
+        return z;
+    }
+}
+
+impl Index<usize> for Matrix {
+    type Output = Vec<f32>;
+    fn index(&self, index: usize) -> &Self::Output {
+        self.get(index)
+    }
+}
+
+impl IndexMut<usize> for Matrix {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        self.get_mut(index)
+    }
+}
+
+impl Mul<&Matrix> for &Matrix {
+    type Output = Matrix;
+    fn mul(self, a: &Matrix) -> Self::Output {
+        let mut result = Matrix::new(self.rows, a.cols);
+        for i in 0..self.rows {
+            for j in 0..a.cols {
+                result[i][j] = 0.0;
+                for k in 0..self.cols {
+                    result[i][j] += self[i][k] * a[k][j];
+                }
+            }
+        }
+        result
+    }
+}
+
+impl Mul<Matrix> for &Matrix {
+    type Output = Matrix;
+    fn mul(self, rhs: Matrix) -> Self::Output {
+        self * &rhs
+    }
+}
+
+impl Mul<&Matrix> for Matrix {
+    type Output = Matrix;
+    fn mul(self, rhs: &Matrix) -> Self::Output {
+        &self * rhs
+    }
+}
+
+impl Mul<Matrix> for Matrix {
+    type Output = Matrix;
+    fn mul(self, rhs: Matrix) -> Matrix {
+        &self * &rhs
+    }
+}
+
+impl Display for Matrix {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut formatted = vec![vec![String::new(); self.cols]; self.rows];
+        let mut max_width = 0;
+
+        for i in 0..self.rows {
+            for j in 0..self.cols {
+                let s = format!("{:.3}", self[i][j]);
+                max_width = max_width.max(s.len());
+                formatted[i][j] = s;
+            }
+        }
+
+        for i in 0..self.rows {
+            write!(f, "|")?;
+            for j in 0..self.cols {
+                write!(f, " {:>width$}", formatted[i][j], width = max_width)?;
+            }
+            writeln!(f, " |")?;
+        }
+
+        Ok(())
+    }
+}

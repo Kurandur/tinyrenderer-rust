@@ -2,7 +2,7 @@ use std::{env, mem::swap};
 
 use rand::Rng;
 use tinyrenderer_rust::{
-    geometry::{Vec2f, Vec2i, Vec3f, Vec3i},
+    geometry::{Matrix, Vec2f, Vec2i, Vec3f, Vec3i},
     model::Model,
     tga::{Format, TGAColor, TGAImage},
 };
@@ -13,49 +13,53 @@ const DEPTH: i32 = 255;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-
     let model_path = if args.len() == 2 {
         &args[1]
     } else {
-        "dude.obj"
+        "obj/dude.obj"
     };
-
-    let mut image = TGAImage::new(IMAGE_WIDTH, IMAGE_HEIGHT, Format::RGB);
-
     let mut model = Model::new(model_path).expect("Failed to load model");
-    model.load_texture("dude_diffuse.tga");
-    let light_dir = Vec3f::new(0.0, 0.0, -1.0);
+    model.load_texture("obj/dude_diffuse.tga");
 
+    // colors
+    let red = TGAColor::from_rgb(255, 0, 0);
+    let green = TGAColor::from_rgb(0, 255, 0);
+    let white = TGAColor::from_rgb(255, 255, 255);
+    let yellow = TGAColor::from_rgb(255, 255, 0);
+
+    // image and camera setup
+    let mut image = TGAImage::new(IMAGE_WIDTH, IMAGE_HEIGHT, Format::RGB);
     let mut zbuffer = vec![i32::MIN; IMAGE_WIDTH as usize * IMAGE_HEIGHT as usize];
+    let light_dir = Vec3f::new(0.0, 0.0, -1.0);
+    let camera = Vec3f::new(0.0, 0.0, 3.0);
+    let mut projection = Matrix::identity(4);
+    let viewport = Matrix::new_from_viewport(
+        (IMAGE_WIDTH / 8) as usize,
+        (IMAGE_HEIGHT / 8) as usize,
+        (IMAGE_WIDTH * 3 / 4) as usize,
+        (IMAGE_HEIGHT * 3 / 4) as usize,
+    );
+    projection[3][2] = -1.0 / camera.z;
 
+    // draw the model
     for i in 0..model.nfaces() {
         let face = model.face(i);
-
         let mut screen_coords: Vec<Vec3i> = Vec::with_capacity(3);
-        let mut world_coords = Vec::with_capacity(3);
-        let mut pts: Vec<Vec3f> = Vec::with_capacity(3);
+        let mut world_coords: Vec<Vec3f> = Vec::with_capacity(3);
 
         for j in 0..3 {
             let idx = face[j].x as usize;
             let v = model.vert(idx);
-
-            screen_coords.push(Vec3i::new(
-                ((v.x + 1.0) * IMAGE_WIDTH as f32 / 2.0) as i32,
-                ((v.y + 1.0) * IMAGE_HEIGHT as f32 / 2.0) as i32,
-                ((v.z + 1.0) * DEPTH as f32 / 2.0) as i32,
-            ));
-            pts.push(world_to_screen(
-                v,
-                IMAGE_WIDTH as usize,
-                IMAGE_HEIGHT as usize,
-            ));
+            screen_coords.push(
+                ((&viewport * &projection) * Matrix::new_from_vector(v))
+                    .to_vector()
+                    .into(),
+            );
             world_coords.push(v);
         }
-        let mut n: Vec3f =
-            (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);
+        let mut n = (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);
         n.normalize();
         let intensity = n * light_dir;
-
         if intensity > 0.0 {
             let mut uv: Vec<Vec2i> = Vec::with_capacity(3);
             for k in 0..3 {
@@ -77,26 +81,6 @@ fn main() {
     }
 
     image.write_tga_file("output.tga", true, true).unwrap();
-    &model
-        .diffusemap
-        .unwrap()
-        .write_tga_file("texture-check.tga", true, true);
-    let mut zbuffer_image = TGAImage::new(IMAGE_WIDTH, IMAGE_HEIGHT, Format::RGB);
-
-    for j in 0..IMAGE_HEIGHT {
-        for i in 0..IMAGE_WIDTH {
-            let idx = i + j * IMAGE_WIDTH;
-            let depth = zbuffer[idx as usize];
-            let _ = zbuffer_image.set(
-                i as usize,
-                j as usize,
-                TGAColor::from_rgb(depth as u8, depth as u8, depth as u8),
-            );
-        }
-    }
-    zbuffer_image
-        .write_tga_file("zbuffer.tga", true, true)
-        .unwrap();
 }
 
 fn world_to_screen(v: Vec3f, width: usize, height: usize) -> Vec3f {
@@ -269,7 +253,7 @@ fn triangle_scanline(
     }
 }
 
-fn line(p0: Vec2i, p1: Vec2i, image: &mut TGAImage, color: TGAColor) {
+fn line(p0: Vec3i, p1: Vec3i, image: &mut TGAImage, color: TGAColor) {
     let mut x0 = p0.x;
     let mut y0 = p0.y;
     let mut x1 = p1.x;
