@@ -141,4 +141,9 @@ impl Model {
     pub fn face(&self, idx: usize) -> &Vec<Vec3i> {
         &self.faces[idx]
     }
+
+    pub fn norm(&self, iface: usize, nvert: usize) -> Vec3f {
+        let idx = self.faces[iface][nvert][2] as usize;
+        return self.norms[idx];
+    }
 }

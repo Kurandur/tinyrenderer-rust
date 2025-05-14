@@ -2,14 +2,28 @@ use std::{env, mem::swap};
 
 use rand::Rng;
 use tinyrenderer_rust::{
-    geometry::{Matrix, Vec2f, Vec2i, Vec3f, Vec3i},
+    geometry::{Matrix, Vec2f, Vec2i, Vec3, Vec3f, Vec3i},
     model::Model,
     tga::{Format, TGAColor, TGAImage},
 };
 
-const IMAGE_WIDTH: i32 = 800;
-const IMAGE_HEIGHT: i32 = 800;
+const IMAGE_WIDTH: i32 = 2000;
+const IMAGE_HEIGHT: i32 = 2000;
 const DEPTH: i32 = 255;
+
+pub fn lookat(eye: Vec3f, center: Vec3f, up: Vec3f) -> Matrix {
+    let z = (eye - center).normalize();
+    let x = up.cross(z).normalize();
+    let y = z.cross(x).normalize();
+    let mut res = Matrix::identity(4);
+    for i in 0..3 {
+        res[0][i] = x[i];
+        res[1][i] = y[i];
+        res[2][i] = z[i];
+        res[i][3] = -center[i];
+    }
+    res
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -32,6 +46,9 @@ fn main() {
     let mut zbuffer = vec![i32::MIN; IMAGE_WIDTH as usize * IMAGE_HEIGHT as usize];
     let light_dir = Vec3f::new(0.0, 0.0, -1.0);
     let camera = Vec3f::new(0.0, 0.0, 3.0);
+    let eye = Vec3::new(1.0, 1.0, 3.0);
+    let center = Vec3::new(0.0, 0.0, 0.0);
+    let model_view = lookat(eye, center, Vec3::new(0.0, 1.0, 0.0));
     let mut projection = Matrix::identity(4);
     let viewport = Matrix::new_from_viewport(
         (IMAGE_WIDTH / 8) as usize,
@@ -39,23 +56,25 @@ fn main() {
         (IMAGE_WIDTH * 3 / 4) as usize,
         (IMAGE_HEIGHT * 3 / 4) as usize,
     );
-    projection[3][2] = -1.0 / camera.z;
+    projection[3][2] = -1.0 / (eye - center).norm();
 
     // draw the model
     for i in 0..model.nfaces() {
         let face = model.face(i);
         let mut screen_coords: Vec<Vec3i> = Vec::with_capacity(3);
         let mut world_coords: Vec<Vec3f> = Vec::with_capacity(3);
-
+        let mut intensity = vec![f32::MIN; 3];
         for j in 0..3 {
             let idx = face[j].x as usize;
             let v = model.vert(idx);
+
             screen_coords.push(
-                ((&viewport * &projection) * Matrix::new_from_vector(v))
+                (&viewport * &projection * &model_view * Matrix::new_from_vector(v))
                     .to_vector()
                     .into(),
             );
             world_coords.push(v);
+            intensity.push(model.norm(i, j) * light_dir);
         }
         let mut n = (world_coords[2] - world_coords[0]) ^ (world_coords[1] - world_coords[0]);
         n.normalize();
