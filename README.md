@@ -10,6 +10,10 @@ The goal at first is port the main logic to rust with minimal changes besides ma
 
 Just some images that were generated while coding this.
 
+#### Wireframe
+
+![wireframe](./assets/wireframe.png)
+
 #### Gray shaded head
 
 The normal generated image
