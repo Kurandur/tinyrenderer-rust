@@ -30,6 +30,10 @@ I added a function that allows shading by a range of colors
 
 ![Texture mapping](assets/texture-mapped-head.png)
 
+Frog test:
+
+![frog test](assets/frog-test.png)
+
 #### Perspective correction
 
 ![Perspective correction](assets/perspective-correction.png)
