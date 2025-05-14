@@ -60,6 +60,27 @@ where
     }
 }
 
+impl<T> Index<usize> for Vec2<T> {
+    type Output = T;
+    fn index(&self, i: usize) -> &T {
+        match i {
+            0 => &self.x,
+            1 => &self.y,
+            _ => panic!("dimension out of range"),
+        }
+    }
+}
+
+impl<T> IndexMut<usize> for Vec2<T> {
+    fn index_mut(&mut self, index: usize) -> &mut T {
+        match index {
+            0 => &mut self.x,
+            1 => &mut self.y,
+            _ => panic!("dimension out of range"),
+        }
+    }
+}
+
 impl<T> fmt::Display for Vec2<T>
 where
     T: fmt::Display,
@@ -181,7 +202,7 @@ where
         .sqrt()
     }
 
-    pub fn normalize(&mut self)
+    pub fn normalize(&mut self) -> Self
     where
         T: From<f32>,
     {
@@ -192,6 +213,7 @@ where
             T::from(f32::from(self.y) * inv),
             T::from(f32::from(self.z) * inv),
         );
+        *self
     }
 
     pub fn cross(self, other: Self) -> Self {
@@ -211,6 +233,29 @@ impl Mul<f32> for Vec3i {
             (self.y as f32 * scalar) as i32,
             (self.z as f32 * scalar) as i32,
         )
+    }
+}
+
+impl<T> Index<usize> for Vec3<T> {
+    type Output = T;
+    fn index(&self, i: usize) -> &T {
+        match i {
+            0 => &self.x,
+            1 => &self.y,
+            2 => &self.z,
+            _ => panic!("dimension out of range"),
+        }
+    }
+}
+
+impl<T> IndexMut<usize> for Vec3<T> {
+    fn index_mut(&mut self, index: usize) -> &mut T {
+        match index {
+            0 => &mut self.x,
+            1 => &mut self.y,
+            2 => &mut self.z,
+            _ => panic!("dimension out of range"),
+        }
     }
 }
 
