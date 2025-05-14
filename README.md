@@ -33,3 +33,7 @@ I added a function that allows shading by a range of colors
 #### Perspective correction
 
 ![Perspective correction](assets/perspective-correction.png)
+
+#### Moving the camera
+
+![Moving the camera](assets/moved-camera.png)
